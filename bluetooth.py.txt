@@ -1,0 +1,53 @@
+from bluepy import btle
+from bluepy.btle import UUID, Peripheral, DefaultDelegate, Service, Characteristic, Descriptor
+
+class WiFiDelegate(DefaultDelegate):
+    def _init_(self):
+        DefaultDelegate._init_(self)
+
+    def handleNotification(self, cHandle, data):
+        print("Received data:", data)
+        # Process the received data (e.g., store WiFi credentials)
+        ssid, password = data.decode('utf-8').split(',')
+        print(f"SSID: {ssid}, Password: {password}")
+
+class WiFiService(Service):
+    WIFI_SERVICE_UUID = UUID("12345678-1234-5678-1234-56789abcdef0")
+    WIFI_CHAR_UUID = UUID("abcdef01-1234-5678-1234-56789abcdef0")
+
+    def _init_(self, peripheral):
+        Service._init_(self, self.WIFI_SERVICE_UUID, True)
+        self.addCharacteristic(WiFiCharacteristic(self))
+
+class WiFiCharacteristic(Characteristic):
+    def _init_(self, service):
+        Characteristic._init_(self, WiFiService.WIFI_CHAR_UUID,
+                                props=Characteristic.props.READ | Characteristic.props.WRITE,
+                                desc="WiFi Credentials")
+        self.service = service
+
+    def WriteValue(self, value):
+        print("WiFi Credentials written:", value.decode('utf-8'))
+
+class WiFiPeripheral(Peripheral):
+    def _init_(self):
+        Peripheral._init_(self)
+        self.addService(WiFiService(self))
+        self.setDelegate(WiFiDelegate())
+
+    def start(self):
+        self.advertise()
+        print("Waiting for notifications...")
+        while True:
+            if self.waitForNotifications(1.0):
+                continue
+
+    def advertise(self):
+        self.setAdvertisingParameters(minInterval=20, maxInterval=30, advType=Peripheral.ADV_IND)
+        self.addAdvertisingData(Peripheral.ADV_UUID, WiFiService.WIFI_SERVICE_UUID)
+        self.addAdvertisingData(Peripheral.ADV_NAME, "RaspberryPiWiFi")
+        self.startAdvertising()
+
+if __name__ == "__main__":
+    wifi_peripheral = WiFiPeripheral()
+    wifi_peripheral.start()
